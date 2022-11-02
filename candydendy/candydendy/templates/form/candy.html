@@ -1,0 +1,12 @@
+{% extends 'form/base.html' %}
+{% block freeapi %}
+{% load render_table from django_tables2 %}
+<title>List of candys</title>
+{% load static %}
+<link rel="stylesheet" href="{% static 'bootstrap.min.css' %}" crossorigin="anonymous">
+<link rel="stylesheet" href="{% static 'candydendy_table.css' %}" crossorigin="anonymous">
+<body>
+        {% render_table table %}
+</body>
+{% endblock %}
+

@@ -1,0 +1,7 @@
+Django>=3.0,<4.0
+psycopg2>=2.8
+django-phonenumber-field
+phonenumbers
+djangorestframework
+django_tables2
+django-prometheus
