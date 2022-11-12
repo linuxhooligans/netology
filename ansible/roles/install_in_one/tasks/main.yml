@@ -1,0 +1,105 @@
+---
+- name: add docker-ce repository
+  ansible.builtin.yum_repository:
+    name: docker-ce
+    description: docker-ce
+    baseurl: https://download.docker.com/linux/centos/$releasever/$basearch/stable/
+    gpgcheck: no
+
+- name: install depend from yum
+  ansible.builtin.yum:
+    name:
+      - epel-release
+      - yum-utils
+      - python3
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+      - certbot
+      - python2-certbot-apache
+    state: present
+
+- name: download docker-compose-linux
+  ansible.builtin.get_url:
+    url: https://github.com/docker/compose/releases/download/v2.12.2/docker-compose-linux-x86_64
+    dest: /usr/local/bin/docker-compose
+    mode: '0755'
+
+- name: remove old symlink /usr/local/bin/docker-compose
+  file:
+   path: "/usr/bin/docker-compose"
+   state: absent
+
+- name: create a symbolic link
+  ansible.builtin.file:
+    src: /usr/local/bin/docker-compose
+    dest: /usr/bin/docker-compose
+    state: link
+
+- name: install depend from pip
+  ansible.builtin.pip:
+    name:
+      - docker
+      - docker-compose
+
+- name: start docker
+  ansible.builtin.systemd:
+    state: started
+    enabled: yes
+    name: docker
+
+- name: create daemon.json
+  copy:
+    dest: "/etc/docker/daemon.json"
+    content: |
+      {
+        "metrics-addr" : "127.0.0.1:9323",
+        "experimental" : true
+      }
+
+- name: restart docker
+  ansible.builtin.systemd:
+    state: restarted
+    name: docker
+
+- name: creates directory /opt/postgresql/data
+  file:
+    path: "{{ item }}"
+    state: directory
+    recurse: yes
+  loop:
+    - /opt/postgresql/data
+    - /opt/generate_db_data
+
+- name: template docker-compose.yaml
+  ansible.builtin.template:
+    src: /netology/docker-compose.temp.yaml
+    dest: /opt/docker-compose.yaml
+    mode: '0644'
+
+- name: copy src folders
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: /opt
+    directory_mode: yes
+    owner: root
+    group: root
+    mode: '0766'
+  loop:
+    - /netology/volumes
+    - /netology/candydendy
+    - /netology/generate_db_data
+
+- name: set permissions
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    recurse: yes
+    mode: '0777'
+  loop:
+    - /opt/volumes
+    - /opt/data
+    - /opt/data/prometheus/

@@ -1,0 +1,12 @@
+---
+public_key_name: deployment_tech_key
+servers_list:
+  - app_candydendy
+  - postgresql
+  # - app_generate_data
+  # - app_get_gui
+  # - app_get_rest
+  # - nginx
+  # - postgresql
+  # - grafana
+  # - prometheus

@@ -1,0 +1,171 @@
+version: "3.9"
+services:
+  db:
+    deploy:
+      resources:
+        limits:
+          cpus: 2
+          memory: 2G
+    image: postgres
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - /opt/data/postgresql/data:/var/lib/postgresql/data
+      - /opt/volumes/postgresql/docker-entrypoint-initdb.d/init.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      - POSTGRES_USER={{POSTGRES_USER}}
+      - POSTGRES_PASSWORD={{POSTGRES_PASSWORD}}
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U {{POSTGRES_USER}}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+  candydendy:
+    deploy:
+      resources:
+        limits:
+          cpus: 2
+          memory: 2G
+    build:
+      context: /opt/candydendy
+      dockerfile: /opt/candydendy/Dockerfile
+    command: /entrypoint.sh
+    volumes:
+      - /opt/candydendy:/candydendy
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      - DJANGO_SUPERUSER_PASSWORD={{DJANGO_SUPERUSER_PASSWORD}}
+      - POSTGRES_DB_HOST={{POSTGRES_DB_HOST}}
+      - POSTGRES_NAME={{POSTGRES_NAME_CD}}
+      - POSTGRES_USER={{POSTGRES_USER_CD}}
+      - POSTGRES_SCHEMA={{POSTGRES_SCHEMA_CD}}
+      - POSTGRES_PASSWORD={{POSTGRES_PASSWORD_CD}}
+      - TECH_NAME={{TECH_NAME}}
+      - TECH_EMAIL={{TECH_EMAIL}}
+      - TECH_PASSWORD={{TECH_PASSWORD}}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "curl --fail http://localhost:8000/api/free || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  generate_db_data:
+     build:
+       context: /opt/generate_db_data
+       dockerfile: /opt/generate_db_data/Dockerfile
+     command: /entrypoint.sh
+     environment:
+       - TECH_NAME={{TECH_NAME}}
+       - TECH_PASSWORD={{TECH_PASSWORD}}
+     depends_on:
+       candydendy:
+         condition: service_healthy
+  prometheus:
+    deploy:
+      resources:
+        limits:
+          cpus: 2
+          memory: 2G
+    image: prom/prometheus
+    volumes:
+      - /opt/volumes/prometheus/etc/:/etc/prometheus/
+      - /opt/data/prometheus:/prometheus
+    ports:
+      - 127.0.0.1:9090:9090
+    restart: always
+    depends_on:
+      candydendy:
+        condition: service_healthy
+  grafana:
+    deploy:
+      resources:
+        limits:
+          cpus: 2
+          memory: 2G
+    image: grafana/grafana
+    volumes:
+      - /opt/volumes/grafana/etc/dashboards:/etc/dashboards
+      - /opt/volumes/grafana/datasources:/etc/grafana/provisioning/datasources
+      - /opt/volumes/grafana/dashboards:/etc/grafana/provisioning/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_USER={{GF_SECURITY_ADMIN_USER}}
+      - GF_SECURITY_ADMIN_PASSWORD={{GF_SECURITY_ADMIN_PASSWORD}}
+      - GF_USERS_ALLOW_SIGN_UP={{GF_USERS_ALLOW_SIGN_UP}}
+    restart: unless-stopped
+    ports:
+      - 3000:3000
+  nginx:
+    deploy:
+      resources:
+        limits:
+          cpus: 2
+          memory: 2G
+    image: nginx:latest
+    ports:
+      - "127.0.0.1:9188:9188"
+      - "5000:5000"
+      - "443:443"
+      - "80:80"
+    volumes:
+      - /opt/volumes/nginx/etc/nginx/ssl:/etc/nginx/ssl
+      - /opt/volumes/nginx/etc/nginx/conf.d/candydendy.conf:/etc/nginx/conf.d/candydendy.conf
+      - /opt/volumes/nginx/etc/nginx/GeoIP/GeoIP.dat:/etc/nginx/GeoIP/GeoIP.dat
+      - /opt/volumes/nginx/etc/nginx/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+     candydendy:
+       condition: service_healthy
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    container_name: nginx-exporter
+    restart: unless-stopped
+    environment:
+      - SCRAPE_URI=http://nginx:9188/nginx_status
+      - TELEMETRY_PATH=/metrics
+      - NGINX_RETRIES=10
+    ports:
+      - "127.0.0.1:9113:9113"
+  dbexporter:
+    deploy:
+      resources:
+        limits:
+          cpus: 1
+          memory: 1G
+    image: prometheuscommunity/postgres-exporter
+    ports:
+      - "127.0.0.1:9187:9187"
+    environment:
+      DATA_SOURCE_NAME: "postgresql://{{POSTGRES_USER_CD}}:{{POSTGRES_PASSWORD_CD}}@db:5432/{{POSTGRES_NAME_CD}}?sslmode=disable"
+    depends_on:
+      db:
+        condition: service_healthy
+  cadvisor:
+    deploy:
+      resources:
+        limits:
+          cpus: 1
+          memory: 1G
+    image: google/cadvisor:latest
+    container_name: monitoring_cadvisor
+    restart: unless-stopped
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    expose:
+      - 8080
+  node-exporter:
+    deploy:
+      resources:
+        limits:
+          cpus: 1
+          memory: 1G
+    image: prom/node-exporter:latest
+    container_name: monitoring_node_exporter
+    restart: unless-stopped
+    expose:
+      - 9100
