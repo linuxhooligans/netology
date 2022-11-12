@@ -1,16 +1,4 @@
 ---
-# - name: read_secrets_variable
-#   gather_facts: false
-#   hosts: localhost
-#   connection: local
-#   tasks:
-#   - name: read_secrets_variable
-#     ansible.builtin.include_vars:
-#       file: /run/secrets/secret_vars
-#       name: secret_vars
-#   tags:
-#     - read_secrets_variable
-
 - name: install_in_one
   gather_facts: false
   hosts: all
